@@ -59,6 +59,8 @@ void *ChildThread(void *newfd) {
 //
 
   while(1) {
+    buf[nbytes] = '\0';
+
     // handle data from a client
     if ((nbytes = recv(childSocket, buf, sizeof(buf), 0)) <= 0) {
       // got error or connection closed by client
@@ -87,6 +89,72 @@ void *ChildThread(void *newfd) {
         msgGetCount++; // point to next message
       }
 
+      //******************************   MSGSTORE *************************************** //
+      else if (strcmp(buf, "MSGSTORE\n") == 0) { 
+
+        //check if logged in, if not send back 401, else ...
+        if (!loginStatus) {
+          send (childSocket, status401, strlen(status401), 0); // send error status
+        } else if (nextAvailableSlot == 20) {
+          send (childSocket, status411, strlen(status411), 0); // if MSGSTORE storage is full, send error
+        } else {
+          send (childSocket, status200, strlen(status200), 0); //send status successful
+          
+          memset(newMessageBuffer, 0, sizeof(newMessageBuffer)); // reset the array
+          
+          messageLen = recv(childSocket, newMessageBuffer, sizeof(newMessageBuffer), 0); // receive data from client
+          newMessageBuffer[messageLen] = '\0';
+          strcpy(msgs[nextAvailableSlot], newMessageBuffer); // store client message into next available slot
+          nextAvailableSlot++; // move to next available slot
+          send (childSocket, status200, strlen(status200), 0); //send status successful
+        }
+      }
+
+      //******************************   LOGIN *************************************** //
+      else if (strncmp(buf, "LOGIN", 5) == 0) { 
+
+        //string manipulation to extract username and password from user input
+        string input(buf);
+        string username = input.substr(6, input.find(" ", 6) - 6); // extract and store username
+        string password = input.substr(input.find(" ", input.find(" ") + 1) + 1); // extract and store password
+        password.erase(password.find_last_not_of("\n") + 1); // remove newline character (\n)
+
+        //create string datatypes and hold char for later calculation
+        for (int i = 0; i < 4; i++) {
+          string tempUser = users[i].username;
+          string tempPassword = users[i].password;
+          
+          //check if username and password matches idatabase
+          if (username == tempUser && password == tempPassword) {
+            //check if root user/pass
+            if(i == 0) {
+              root = true;
+            }
+            loginStatus = true; // set login status to true for remaining session
+            send (childSocket, status200, strlen(status200), 0); //send status successful   
+            break; // Exit the loop since we found a match
+          }
+        }
+
+        if (!loginStatus) {
+          send (childSocket, status410, strlen(status410), 0); //send error
+        }   
+      }
+
+      //******************************   LOGOUT *************************************** //
+      else if (strcmp(buf, "LOGOUT\n") == 0) { 
+
+        //check loginStatus to ensure user is logged in, if true then logout user and if not send error
+        if (!loginStatus) {
+          send (childSocket, status401, strlen(status401) + 1, 0);
+        } else {
+          // reset flags
+          loginStatus = false;
+          root = false;
+          send (childSocket, status200, strlen(status200), 0); //send status successful  
+        }
+      }
+
       for(j = 0; j <= fdmax; j++) {
         // send to everyone!
         if (FD_ISSET(j, &master)) {
@@ -98,6 +166,9 @@ void *ChildThread(void *newfd) {
           }
         }
       }
+
+      
+
     }
   }
 }
