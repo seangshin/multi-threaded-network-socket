@@ -40,8 +40,6 @@ struct Users users[4];
   char status410[] = "410 Wrong UserID or Password\n";
   char status411[] = "411 MSGSTORE Full.\n";
   char* msgs[20];
-  bool loginStatus = false;
-  bool root = false;
   char newMessageBuffer[MAX_LINE]; // Buffer used to store char input for MSGSTORE
   int messageLen; // Store number of bytes from recv
   int msgGetCount = 0; 
@@ -56,7 +54,9 @@ void *ChildThread(void *newfd) {
   int i, j;
   int childSocket = (long) newfd;
 
-//
+
+  bool loginStatus = false;
+  bool root = false;
 
   while(1) {
     buf[nbytes] = '\0';
@@ -155,17 +155,18 @@ void *ChildThread(void *newfd) {
         }
       }
 
-      for(j = 0; j <= fdmax; j++) {
-        // send to everyone!
-        if (FD_ISSET(j, &master)) {
-          // except the listener and ourselves
-          if (j != listener && j != childSocket) {
-            if (send(j, buf, nbytes, 0) == -1) {
-              perror("send");
-            }
-          }
-        }
-      }
+//********** Send to everyone *************//
+      // for(j = 0; j <= fdmax; j++) {
+      //   // send to everyone!
+      //   if (FD_ISSET(j, &master)) {
+      //     // except the listener and ourselves
+      //     if (j != listener && j != childSocket) {
+      //       if (send(j, buf, nbytes, 0) == -1) {
+      //         perror("send");
+      //       }
+      //     }
+      //   }
+      // }
 
       
 
