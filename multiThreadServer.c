@@ -59,7 +59,7 @@ void *ChildThread(void *newfd) {
   bool root = false;
 
   while(1) {
-    buf[nbytes] = '\0';
+    //buf[nbytes] = '\0';
 
     // handle data from a client
     if ((nbytes = recv(childSocket, buf, sizeof(buf), 0)) <= 0) {
@@ -80,7 +80,7 @@ void *ChildThread(void *newfd) {
 
       //******************************   MSGGET *************************************** //
       if (strcmp(buf, "MSGGET\n") == 0) { //MSGGET
-        cout << "in MSGGET" << endl;
+
         if (msgGetCount >= nextAvailableSlot) {
           msgGetCount = 0; // Reset back to the first message
         }
