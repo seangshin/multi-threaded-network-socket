@@ -30,6 +30,7 @@ int main(int argc, char * argv[]) {
   char buf[MAX_LINE];
   int len;
   int s;
+  bool quit = false;
 
   FD_ZERO(&master);    // clear the master and temp sets
   FD_ZERO(&read_fds);
@@ -81,13 +82,25 @@ int main(int argc, char * argv[]) {
       }
     }
 
+    if ((strcmp(buf, "QUIT\n") == 0) || (strcmp(buf, "SHUTDOWN\n") == 0)) {
+      quit = true;
+    }
+
     memset(buf, '\0', MAX_LINE); // reset buffer
-    
+
     if (FD_ISSET(s, &read_fds)) {
       // handle data from the server
       if (recv(s, buf, sizeof(buf), 0) > 0) {
         cout << buf;
       }
+    }
+    
+    if (strcmp(buf, "210 the server is about to shutdown .....\n") == 0) {
+      break;
+    }
+
+    if (quit == true) {
+      break;
     }
   }
 

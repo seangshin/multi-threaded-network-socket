@@ -34,6 +34,7 @@ struct Users users[4];
 
 // *********************** Initialization Steps ******************************** //
   char status200[] = "200 OK\n";
+  char status210[] = "210 the server is about to shutdown .....\n";
   char status300[] = "300 message format error\n";
   char status401[] = "401 You are not currently logged in, login first.\n";
   char status402[] = "402 User not allowed to execute this command.\n";
@@ -153,6 +154,55 @@ void *ChildThread(void *newfd) {
           root = false;
           send (childSocket, status200, strlen(status200), 0); //send status successful  
         }
+      }
+
+      //******************************   QUIT *************************************** //
+      else if (strcmp(buf, "QUIT\n") == 0) {
+
+        //reset root and loginStatus to false, then send successful message
+        root = false;
+        loginStatus = false;
+        send (childSocket, status200, strlen(status200), 0); //send status successful
+
+      }
+
+      //******************************   SHUTDOWN *************************************** //
+      else if (strcmp(buf, "SHUTDOWN\n") == 0) {
+        //check if root user is logged in, if so then send successful status and close/terminate server
+        if(!root) {
+          send (childSocket, status402, strlen(status402), 0);
+        } else if (root){
+          send (childSocket, status200, strlen(status200), 0); //send status successful
+
+          //broadcast to all other clients to inform them the server will shutdown
+          for(j = 0; j <= fdmax; j++) {
+            // send to everyone!
+            if (FD_ISSET(j, &master)) {
+              // except the listener and ourselves
+              if (j != listener && j != childSocket) {
+                if (send(j, status210, strlen(status210), 0) == -1) {
+                  perror("send");
+                } else {
+                  close(j); // bye!
+                  FD_CLR(j, &master); // remove from master set
+                }
+              }
+            }
+          }
+
+          cout << "Shutting down..." << endl;
+          close(childSocket);
+          FD_CLR(childSocket, &master);
+          close(listener);
+          exit(1);
+          
+
+        } else {
+          send (childSocket, status300, strlen(status300), 0); //send status successful
+        }
+        //reset root and loginStatus to false
+        root = false;
+        loginStatus = false;
       }
 
 //********** Send to everyone *************//
