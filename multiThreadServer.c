@@ -55,6 +55,7 @@ set<int> activeFD;
   char status402[] = "402 User not allowed to execute this command.\n";
   char status410[] = "410 Wrong UserID or Password\n";
   char status411[] = "411 MSGSTORE Full.\n";
+  char status420[] = "420 either the user does not exist or is not logged in.\n";
   char* msgs[20];
   char newMessageBuffer[MAX_LINE]; // Buffer used to store char input for MSGSTORE
   int messageLen; // Store number of bytes from recv
@@ -261,6 +262,47 @@ void *ChildThread(void *newfd) {
         }
       }
 
+      //******************************   SEND *************************************** //
+      else if (strncmp(buf, "SEND", 4) == 0) { 
+
+        //string manipulation to extract username and password from user input
+        string u(buf);
+        string user = u.substr(5, u.find(" ", 5) - 5); // extract and store username
+        user.erase(user.find_last_not_of("\n") + 1); // remove newline character (\n)
+        const char *userChar = user.c_str(); //convert to type char
+
+        bool search = false; //track whether user exists and active
+        struct ClientInfo *currentClient = &clientList[childSocket]; //access clientList for current user
+        //loop to iterate through the set of all active file descriptors
+        for (set<int>::iterator it = activeFD.begin(); it != activeFD.end(); ++it) {
+          int i = *it;
+          struct ClientInfo *client = &clientList[i]; //access clientList
+
+          //check if user exists
+          if (userChar == client->username) {
+            search = true;
+            send (childSocket, status200, strlen(status200), 0); //send status successful
+
+            memset(newMessageBuffer, 0, sizeof(newMessageBuffer)); // reset the array
+          
+            messageLen = recv(childSocket, newMessageBuffer, sizeof(newMessageBuffer), 0); // receive data from client
+            newMessageBuffer[messageLen] = '\0';
+
+            string autoResponse = "200 OK you have a new message from " + currentClient->username + "\n";
+            const char *autoMsg = autoResponse.c_str(); //convert to type char
+            send (i, autoMsg, strlen(autoMsg), 0); //send message to requested client
+            send (i, newMessageBuffer, strlen(newMessageBuffer), 0); //send message to requested client
+            send (childSocket, status200, strlen(status200), 0); //send status successful
+          }
+        }
+
+        //if user is not found, send error
+        if (search == false) {
+          send (childSocket, status420, strlen(status420), 0); //send error message
+        }
+
+      }
+      
 //********** Send to everyone *************//
       // for(j = 0; j <= fdmax; j++) {
       //   // send to everyone!
