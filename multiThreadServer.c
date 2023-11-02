@@ -19,8 +19,8 @@ using namespace std;
 
 #define PORT 2477  // port we're listening on
 #define MAX_LINE 256
+#define MAX_CLIENTS 100
 
-//
 fd_set master;   // master file descriptor list
 int listener;    // listening socket descriptor
 int fdmax;
@@ -31,6 +31,17 @@ struct Users {
   char password[20];
 };
 struct Users users[4];
+
+//define structure for clients
+struct ClientInfo {
+  int fd;
+  string username;
+  char ip_address[16];
+};
+
+//create an array to store ClientInfo data type
+struct ClientInfo clientList[MAX_CLIENTS];
+int numClients = 0; //keep track of connect clients
 
 // *********************** Initialization Steps ******************************** //
   char status200[] = "200 OK\n";
@@ -60,7 +71,6 @@ void *ChildThread(void *newfd) {
   bool root = false;
 
   while(1) {
-    //buf[nbytes] = '\0';
 
     // handle data from a client
     if ((nbytes = recv(childSocket, buf, sizeof(buf), 0)) <= 0) {
@@ -68,6 +78,9 @@ void *ChildThread(void *newfd) {
       if (nbytes == 0) {
         // connection closed
         cout << "multiThreadServer: socket " << childSocket <<" hung up" << endl;
+
+        memset(&clientList[childSocket], 0, sizeof(ClientInfo)); //delete client info
+        numClients--; // decrement number of clients
       } else {
         perror("recv");
       }
@@ -131,6 +144,14 @@ void *ChildThread(void *newfd) {
             if(i == 0) {
               root = true;
             }
+            
+            // add username to existing client info
+            struct ClientInfo *client = &clientList[childSocket];
+            client->username = username;
+            cout << "my fd: " << client->fd << endl; //debug
+            cout << "my IP: " << client->ip_address << endl; //debug
+            cout << "my username: " << client->username << endl; //debug
+
             loginStatus = true; // set login status to true for remaining session
             send (childSocket, status200, strlen(status200), 0); //send status successful   
             break; // Exit the loop since we found a match
@@ -149,6 +170,14 @@ void *ChildThread(void *newfd) {
         if (!loginStatus) {
           send (childSocket, status401, strlen(status401) + 1, 0);
         } else {
+
+          //remove username from existing client info
+          struct ClientInfo *client = &clientList[childSocket];
+          client->username = "Unknown";
+          cout << "my fd: " << client->fd << endl; //debug
+          cout << "my IP: " << client->ip_address << endl; //debug
+          cout << "my username: " << client->username << endl; //debug
+
           // reset flags
           loginStatus = false;
           root = false;
@@ -158,6 +187,9 @@ void *ChildThread(void *newfd) {
 
       //******************************   QUIT *************************************** //
       else if (strcmp(buf, "QUIT\n") == 0) {
+
+        memset(&clientList[childSocket], 0, sizeof(ClientInfo)); //delete client info
+        numClients--; // decrement number of clients
 
         //reset root and loginStatus to false, then send successful message
         root = false;
@@ -304,6 +336,27 @@ int main(void) {
     } else {
       FD_SET(newfd, &master); // add to master set
       cout << "multiThreadServer: new connection from " << inet_ntoa(remoteaddr.sin_addr) << " socket " << newfd << endl;
+
+      //********* keep track of client info***************************************
+      if (newfd < MAX_CLIENTS) {
+        struct ClientInfo newClient; //initialize new ClientInfo object
+        newClient.fd = newfd; //assign fd
+        newClient.username = "Unknown"; //assign username
+        char* ipString = inet_ntoa(remoteaddr.sin_addr); //create copy of client IP address using inet_ntoa
+        strcpy(newClient.ip_address, ipString); //assign IP by copying above string
+        clientList[newfd] = newClient;
+        numClients++;
+
+        cout << "fd: " << newClient.fd << endl; //debug
+        cout << "username: " << newClient.username << endl; //debug
+        cout << "IP: " << newClient.ip_address << endl; //debug
+        cout << "num of clients: " << numClients << endl; //debug
+      } else {
+        perror("max client exceed");
+        exit(1);
+      }
+      
+      //**************************************************************************
 
       if (newfd > fdmax) {    // keep track of the maximum
         fdmax = newfd;
