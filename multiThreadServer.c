@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <cstring>
 #include <cstdlib>
+#include <set>
 
 using namespace std;
 
@@ -42,6 +43,9 @@ struct ClientInfo {
 //create an array to store ClientInfo data type
 struct ClientInfo clientList[MAX_CLIENTS];
 int numClients = 0; //keep track of connect clients
+
+//create a set to keep track of active file descriptors
+set<int> activeFD;
 
 // *********************** Initialization Steps ******************************** //
   char status200[] = "200 OK\n";
@@ -79,6 +83,7 @@ void *ChildThread(void *newfd) {
         // connection closed
         cout << "multiThreadServer: socket " << childSocket <<" hung up" << endl;
 
+        activeFD.erase(childSocket); //remove file descriptor from active list
         memset(&clientList[childSocket], 0, sizeof(ClientInfo)); //delete client info
         numClients--; // decrement number of clients
       } else {
@@ -188,6 +193,7 @@ void *ChildThread(void *newfd) {
       //******************************   QUIT *************************************** //
       else if (strcmp(buf, "QUIT\n") == 0) {
 
+        activeFD.erase(childSocket); //remove file descriptor from active list
         memset(&clientList[childSocket], 0, sizeof(ClientInfo)); //delete client info
         numClients--; // decrement number of clients
 
@@ -235,6 +241,24 @@ void *ChildThread(void *newfd) {
         //reset root and loginStatus to false
         root = false;
         loginStatus = false;
+      }
+
+      //******************************   WHO *************************************** //
+      else if (strcmp(buf, "WHO\n") == 0) {
+        send (childSocket, status200, strlen(status200), 0); //send status successful
+
+        char msg1[30];
+        strcpy(msg1, "The list of the active users: \n");
+        send (childSocket, msg1, strlen(msg1), 0);
+
+        //loop to iterate through the set of all active file descriptors
+        for (set<int>::iterator it = activeFD.begin(); it != activeFD.end(); ++it) {
+          int i = *it;
+          struct ClientInfo *client = &clientList[i]; //access clientList
+          string temp = client->username  + "      " + client->ip_address + "\n"; //concat client info
+          const char *msg2 = temp.c_str(); //convert to type char
+          send (childSocket, msg2, strlen(msg2), 0); //send to client
+        }
       }
 
 //********** Send to everyone *************//
@@ -339,6 +363,7 @@ int main(void) {
 
       //********* keep track of client info***************************************
       if (newfd < MAX_CLIENTS) {
+        activeFD.insert(newfd); //keep track of file descriptor
         struct ClientInfo newClient; //initialize new ClientInfo object
         newClient.fd = newfd; //assign fd
         newClient.username = "Unknown"; //assign username
@@ -352,7 +377,7 @@ int main(void) {
         cout << "IP: " << newClient.ip_address << endl; //debug
         cout << "num of clients: " << numClients << endl; //debug
       } else {
-        perror("max client exceed");
+        perror("max client exceeded, try again later");
         exit(1);
       }
       
