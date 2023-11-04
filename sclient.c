@@ -31,6 +31,7 @@ int main(int argc, char * argv[]) {
   int len;
   int s;
   bool quit = false;
+  bool shutdown = false;
 
   FD_ZERO(&master);    // clear the master and temp sets
   FD_ZERO(&read_fds);
@@ -63,6 +64,8 @@ int main(int argc, char * argv[]) {
   fdmax = s; // so far, it's this one
 
   /* main loop; get and send lines of text */
+  int counter = 0;
+  int tracker;
   while (1) {
     read_fds = master; // copy it
     if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
@@ -82,9 +85,12 @@ int main(int argc, char * argv[]) {
       }
     }
 
-    if ((strcmp(buf, "QUIT\n") == 0) || (strcmp(buf, "SHUTDOWN\n") == 0)) {
+    if ((strcmp(buf, "QUIT\n") == 0)) {
       quit = true;
-    }
+    } else if ((strcmp(buf, "SHUTDOWN\n") == 0)) {
+      shutdown = true;
+      tracker = counter;
+    } 
 
     memset(buf, '\0', MAX_LINE); // reset buffer
 
@@ -99,9 +105,17 @@ int main(int argc, char * argv[]) {
       break;
     }
 
+    if (shutdown == true && strcmp(buf, "200 OK\n") == 0 && tracker == counter-1) {
+      break;
+    } else if (tracker == counter-2) {
+      shutdown = false;
+    }
+
     if (quit == true) {
       break;
     }
+
+    counter++;
   }
 
   close(s);

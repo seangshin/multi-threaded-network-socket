@@ -84,8 +84,12 @@ void *ChildThread(void *newfd) {
         // connection closed
         cout << "multiThreadServer: socket " << childSocket <<" hung up" << endl;
 
+        //reset values of ClientInfo
+        clientList[childSocket].fd=0;
+        clientList[childSocket].username="";
+        strcpy(clientList[childSocket].ip_address, "");
+
         activeFD.erase(childSocket); //remove file descriptor from active list
-        memset(&clientList[childSocket], 0, sizeof(ClientInfo)); //delete client info
         numClients--; // decrement number of clients
       } else {
         perror("recv");
@@ -154,9 +158,6 @@ void *ChildThread(void *newfd) {
             // add username to existing client info
             struct ClientInfo *client = &clientList[childSocket];
             client->username = username;
-            cout << "my fd: " << client->fd << endl; //debug
-            cout << "my IP: " << client->ip_address << endl; //debug
-            cout << "my username: " << client->username << endl; //debug
 
             loginStatus = true; // set login status to true for remaining session
             send (childSocket, status200, strlen(status200), 0); //send status successful   
@@ -180,9 +181,6 @@ void *ChildThread(void *newfd) {
           //remove username from existing client info
           struct ClientInfo *client = &clientList[childSocket];
           client->username = "Unknown";
-          cout << "my fd: " << client->fd << endl; //debug
-          cout << "my IP: " << client->ip_address << endl; //debug
-          cout << "my username: " << client->username << endl; //debug
 
           // reset flags
           loginStatus = false;
@@ -194,8 +192,12 @@ void *ChildThread(void *newfd) {
       //******************************   QUIT *************************************** //
       else if (strcmp(buf, "QUIT\n") == 0) {
 
+        //reset values of ClientInfo
+        clientList[childSocket].fd=0;
+        clientList[childSocket].username="";
+        strcpy(clientList[childSocket].ip_address, "");
+
         activeFD.erase(childSocket); //remove file descriptor from active list
-        memset(&clientList[childSocket], 0, sizeof(ClientInfo)); //delete client info
         numClients--; // decrement number of clients
 
         //reset root and loginStatus to false, then send successful message
@@ -211,6 +213,10 @@ void *ChildThread(void *newfd) {
         if(!root) {
           send (childSocket, status402, strlen(status402), 0);
         } else if (root){
+          //reset root and loginStatus to false
+          root = false;
+          loginStatus = false;
+
           send (childSocket, status200, strlen(status200), 0); //send status successful
 
           //broadcast to all other clients to inform them the server will shutdown
@@ -230,18 +236,15 @@ void *ChildThread(void *newfd) {
           }
 
           cout << "Shutting down..." << endl;
-          close(childSocket);
-          FD_CLR(childSocket, &master);
-          close(listener);
-          exit(1);
+          close(childSocket); //close child socket
+          FD_CLR(childSocket, &master); //remove child socket from master set
+          close(listener); 
+          exit(1); //terminate program
           
 
         } else {
           send (childSocket, status300, strlen(status300), 0); //send status successful
         }
-        //reset root and loginStatus to false
-        root = false;
-        loginStatus = false;
       }
 
       //******************************   WHO *************************************** //
@@ -255,8 +258,8 @@ void *ChildThread(void *newfd) {
         //loop to iterate through the set of all active file descriptors
         for (set<int>::iterator it = activeFD.begin(); it != activeFD.end(); ++it) {
           int i = *it;
-          struct ClientInfo *client = &clientList[i]; //access clientList
-          string temp = client->username  + "      " + client->ip_address + "\n"; //concat client info
+          struct ClientInfo client = clientList[i]; //access clientList
+          string temp = client.username  + "      " + client.ip_address + "\n"; //concat client info
           const char *msg2 = temp.c_str(); //convert to type char
           send (childSocket, msg2, strlen(msg2), 0); //send to client
         }
@@ -272,14 +275,14 @@ void *ChildThread(void *newfd) {
         const char *userChar = user.c_str(); //convert to type char
 
         bool search = false; //track whether user exists and active
-        struct ClientInfo *currentClient = &clientList[childSocket]; //access clientList for current user
+        struct ClientInfo currentClient = clientList[childSocket]; //access clientList for current user
         //loop to iterate through the set of all active file descriptors
         for (set<int>::iterator it = activeFD.begin(); it != activeFD.end(); ++it) {
           int i = *it;
-          struct ClientInfo *client = &clientList[i]; //access clientList
+          struct ClientInfo client = clientList[i]; //access clientList
 
           //check if user exists
-          if (userChar == client->username) {
+          if (userChar == client.username) {
             search = true;
             send (childSocket, status200, strlen(status200), 0); //send status successful
 
@@ -288,7 +291,7 @@ void *ChildThread(void *newfd) {
             messageLen = recv(childSocket, newMessageBuffer, sizeof(newMessageBuffer), 0); // receive data from client
             newMessageBuffer[messageLen] = '\0';
 
-            string autoResponse = "200 OK you have a new message from " + currentClient->username + "\n";
+            string autoResponse = "200 OK you have a new message from " + currentClient.username + "\n";
             const char *autoMsg = autoResponse.c_str(); //convert to type char
             send (i, autoMsg, strlen(autoMsg), 0); //send message to requested client
             send (i, newMessageBuffer, strlen(newMessageBuffer), 0); //send message to requested client
@@ -302,21 +305,6 @@ void *ChildThread(void *newfd) {
         }
 
       }
-      
-//********** Send to everyone *************//
-      // for(j = 0; j <= fdmax; j++) {
-      //   // send to everyone!
-      //   if (FD_ISSET(j, &master)) {
-      //     // except the listener and ourselves
-      //     if (j != listener && j != childSocket) {
-      //       if (send(j, buf, nbytes, 0) == -1) {
-      //         perror("send");
-      //       }
-      //     }
-      //   }
-      // }
-
-      
 
     }
   }
@@ -414,10 +402,6 @@ int main(void) {
         clientList[newfd] = newClient;
         numClients++;
 
-        cout << "fd: " << newClient.fd << endl; //debug
-        cout << "username: " << newClient.username << endl; //debug
-        cout << "IP: " << newClient.ip_address << endl; //debug
-        cout << "num of clients: " << numClients << endl; //debug
       } else {
         perror("max client exceeded, try again later");
         exit(1);
